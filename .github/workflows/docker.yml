@@ -204,12 +204,51 @@ jobs:
             ${{ inputs.debug && 'prefix=debug-,onlatest=true' || '' }}
           tags: |
             type=ref,event=branch
+            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{version}},suffix=-{{date 'YYYYMMDD'}}
             type=semver,pattern={{major}}.{{minor}}
           labels: |
             org.opencontainers.image.base.name=${{ steps.base-image.outputs.name }}
             org.opencontainers.image.base.digest=${{ steps.base-image.outputs.digest }}
+
+      - name: Set OCI image version
+        id: image-version
+        env:
+          METADATA_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          # Cargo.toml is the single source of truth for the version, so the label
+          # agrees with what the binary reports: RestateVersion::current() uses
+          # CARGO_PKG_VERSION, which comes from [workspace.package] version.
+          BASE_VERSION=$(sed -n '/^\[workspace\.package\]/,/^\[/{s/^version = "\(.*\)"$/\1/p;}' Cargo.toml)
+          if [[ -z "$BASE_VERSION" ]]; then
+            echo "Could not read version from [workspace.package] in Cargo.toml"
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            # Released images are identified by the version alone, eg 1.7.3.
+            IMAGE_VERSION="${BASE_VERSION}"
+
+            # The tag should agree with Cargo.toml; if it doesn't, the label follows
+            # Cargo.toml because that is what the binary will report.
+            if [[ -n "$METADATA_VERSION" && "$METADATA_VERSION" != "$BASE_VERSION" ]]; then
+              echo "::warning::Tag version ${METADATA_VERSION} does not match Cargo.toml version ${BASE_VERSION}; labelling image as ${BASE_VERSION}"
+            fi
+          else
+            # Docker metadata supplies the build identity, for example pr-9999 or main.
+            # Fall back to the ref name (then the commit sha) for events metadata
+            # does not produce a version for.
+            QUALIFIER=$(sed -E 's/[^0-9A-Za-z.-]+/-/g; s/\.+/./g; s/^\.//; s/\.$//' <<< "${METADATA_VERSION:-${GITHUB_REF_NAME:-${GITHUB_SHA::8}}}")
+            if [[ -z "$QUALIFIER" ]]; then
+              echo "Could not derive a usable version qualifier"
+              exit 1
+            fi
+            IMAGE_VERSION="${BASE_VERSION}+${QUALIFIER}"
+          fi
+
+          echo "version=${IMAGE_VERSION}" >> $GITHUB_OUTPUT
+          echo "OCI image version: ${IMAGE_VERSION}"
 
       - name: Build${{(inputs.uploadImageAsTarball == '' || github.ref == 'refs/heads/main') && ' and push ' || ' '}}Docker image
         id: build
@@ -223,7 +262,9 @@ jobs:
           outputs: |
             ${{ (inputs.uploadImageAsTarball == '' || github.ref == 'refs/heads/main') && 'type=registry' || '' }}
             ${{ inputs.uploadImageAsTarball != '' && 'type=oci,dest=restate.tar' || '' }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.version=${{ steps.image-version.outputs.version }}
           # on main, always push both platforms, otherwise use platform input
           platforms: ${{ github.ref == 'refs/heads/main' && 'linux/arm64,linux/amd64' || (inputs.platforms || 'linux/arm64,linux/amd64') }}
           network: host
