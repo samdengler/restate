@@ -49,9 +49,13 @@ restate deployments register arn:aws:bedrock-agentcore:us-east-1:<acct>:runtime/
   [--assume-role-arn <role>]
 ```
 
-Not covered yet (follow-ups for a real PR): PATCH address updates for
-AgentCore deployments (rejected; re-register instead), zstd compression,
-UI affordances, docs, config surface for a dedicated AWS profile.
+The branch is fmt/clippy clean and tested: ARN parsing, storage serde
+round-trip, untagged wire-enum ordering, schema-registry
+register/re-register/update-rejection, and `runtimeSessionId` derivation
+(writing these caught and fixed a re-registration dedup bug). Not covered
+yet (follow-ups for a real PR): PATCH address updates for AgentCore
+deployments (rejected; re-register instead), zstd compression, UI
+affordances, docs, config surface for a dedicated AWS profile.
 
 ## Demo
 
