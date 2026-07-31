@@ -91,7 +91,8 @@ impl AgentCoreClient {
                 // Restate has its own retry mechanisms
                 .retry_config(aws_config::retry::RetryConfig::disabled());
 
-            let client = aws_sdk_bedrockagentcore::Client::from_conf(client_builder.clone().build());
+            let client =
+                aws_sdk_bedrockagentcore::Client::from_conf(client_builder.clone().build());
 
             let role_to_clients = match assume_role_cache_mode {
                 AssumeRoleCacheMode::Unbounded => Some(Default::default()),
@@ -144,11 +145,7 @@ impl AgentCoreClient {
         // Pin every attempt of the same invocation to the same microVM
         // session; discovery requests have no invocation id and can land on
         // any fresh session.
-        let session_id = headers
-            .get(X_RESTATE_INVOCATION_ID)
-            .and_then(|h| h.to_str().ok())
-            .map(str::to_owned)
-            .unwrap_or_else(|| format!("restate-discovery-{}", uuid::Uuid::now_v7()));
+        let session_id = derive_runtime_session_id(&headers);
 
         async move {
             let inner = inner.await;
@@ -159,8 +156,8 @@ impl AgentCoreClient {
                 .collect()
                 .await?
                 .aggregate();
-            let request_body = aggregated_request_body_buf
-                .copy_to_bytes(aggregated_request_body_buf.remaining());
+            let request_body =
+                aggregated_request_body_buf.copy_to_bytes(aggregated_request_body_buf.remaining());
 
             let payload = ApiGatewayProxyRequest {
                 path: Some(path.path()),
@@ -180,7 +177,9 @@ impl AgentCoreClient {
                     serde_json::to_vec(&payload).map_err(AgentCoreError::SerializationError)?,
                 ))
                 .customize()
-                .config_override(aws_sdk_bedrockagentcore::config::Builder::default().region(region))
+                .config_override(
+                    aws_sdk_bedrockagentcore::config::Builder::default().region(region),
+                )
                 .send()
                 .await
                 .map_err(Box::new)?;
@@ -251,6 +250,17 @@ impl AgentCoreClientInner {
     }
 }
 
+/// Derive the AgentCore `runtimeSessionId` for a request: the Restate
+/// invocation id verbatim when present (pinning retries/resumes of an
+/// invocation to the same warm microVM), otherwise a fresh discovery session.
+fn derive_runtime_session_id(headers: &HeaderMap<HeaderValue>) -> String {
+    headers
+        .get(X_RESTATE_INVOCATION_ID)
+        .and_then(|h| h.to_str().ok())
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("restate-discovery-{}", uuid::Uuid::now_v7()))
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum AgentCoreError {
     #[error("problem reading request or response body: {0}")]
@@ -276,5 +286,31 @@ impl AgentCoreError {
             | AgentCoreError::DeserializationError(_)
             | AgentCoreError::Response(_) => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_id_is_the_invocation_id_verbatim() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            X_RESTATE_INVOCATION_ID,
+            HeaderValue::from_static("inv_1gOolleakRq544v9Pi3JsL7bEw3M2UtT3Y"),
+        );
+        assert_eq!(
+            derive_runtime_session_id(&headers),
+            "inv_1gOolleakRq544v9Pi3JsL7bEw3M2UtT3Y"
+        );
+    }
+
+    #[test]
+    fn session_id_fallback_meets_agentcore_minimum_length() {
+        let session_id = derive_runtime_session_id(&HeaderMap::new());
+        assert!(session_id.starts_with("restate-discovery-"));
+        // AgentCore requires runtimeSessionId to be at least 33 characters
+        assert!(session_id.len() >= 33, "too short: {session_id}");
     }
 }

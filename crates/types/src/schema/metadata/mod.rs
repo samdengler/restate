@@ -30,7 +30,8 @@ use restate_util_time::FriendlyDuration;
 
 use crate::config::{Configuration, InvocationRetryPolicyOptions};
 use crate::deployment::{
-    DeploymentAddress, Headers, HttpDeploymentAddress, LambdaDeploymentAddress,
+    AgentCoreDeploymentAddress, DeploymentAddress, Headers, HttpDeploymentAddress,
+    LambdaDeploymentAddress,
 };
 use crate::identifiers::{DeploymentId, SubscriptionId};
 use crate::invocation::{InvocationTargetType, ServiceType, WorkflowHandlerType};
@@ -268,6 +269,10 @@ impl Deployment {
                 DeploymentType::Lambda { arn: this_arn, .. },
                 DeploymentAddress::Lambda(LambdaDeploymentAddress { arn: other_arn, .. }),
             ) => deployment::Deployment::semantic_eq_lambda(this_arn, other_arn),
+            (
+                DeploymentType::AgentCore { arn: this_arn, .. },
+                DeploymentAddress::AgentCore(AgentCoreDeploymentAddress { arn: other_arn, .. }),
+            ) => this_arn == other_arn,
             _ => false,
         }
     }

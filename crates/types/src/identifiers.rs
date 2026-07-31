@@ -1080,6 +1080,8 @@ impl Display for AgentCoreRuntimeArn {
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
+// Variant naming kept consistent with InvalidLambdaARN
+#[allow(clippy::enum_variant_names)]
 pub enum InvalidAgentCoreRuntimeArn {
     #[error("An AgentCore runtime ARN must have 6 components delimited by `:`")]
     InvalidFormat,
@@ -1115,7 +1117,10 @@ impl FromStr for AgentCoreRuntimeArn {
         let runtime_id = resource
             .strip_prefix("runtime/")
             .ok_or(InvalidAgentCoreRuntimeArn::InvalidResourceType)?;
-        if partition.is_empty() || region.is_empty() || account_id.is_empty() || runtime_id.is_empty()
+        if partition.is_empty()
+            || region.is_empty()
+            || account_id.is_empty()
+            || runtime_id.is_empty()
         {
             return Err(InvalidAgentCoreRuntimeArn::InvalidComponent);
         }
@@ -1713,6 +1718,49 @@ mod tests {
             assert_eq!(
                 LambdaARN::from_str(bad).unwrap_err(),
                 InvalidLambdaARN::MissingVersionSuffix
+            );
+        }
+    }
+
+    #[test]
+    fn roundtrip_agentcore_runtime_arn() {
+        let good = "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/my_agent-a1B2c3";
+
+        let expected = AgentCoreRuntimeArn::from_str(good).unwrap();
+        assert_eq!(good, expected.to_string());
+        assert_eq!("us-east-1", expected.region());
+    }
+
+    #[test]
+    fn invalid_agentcore_runtime_arns() {
+        for (bad, expected) in [
+            (
+                // a Lambda ARN is not an AgentCore runtime ARN
+                "arn:aws:lambda:us-east-1:123456789012:function:my-function:1",
+                InvalidAgentCoreRuntimeArn::InvalidService,
+            ),
+            (
+                "arn:aws:bedrock-agentcore:us-east-1:123456789012:agent/my_agent",
+                InvalidAgentCoreRuntimeArn::InvalidResourceType,
+            ),
+            (
+                "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/",
+                InvalidAgentCoreRuntimeArn::InvalidComponent,
+            ),
+            (
+                "arn:aws:bedrock-agentcore::123456789012:runtime/my_agent",
+                InvalidAgentCoreRuntimeArn::InvalidComponent,
+            ),
+            ("nonsense", InvalidAgentCoreRuntimeArn::InvalidFormat),
+            (
+                "foo:aws:bedrock-agentcore:us-east-1:123456789012:runtime/my_agent",
+                InvalidAgentCoreRuntimeArn::InvalidPrefix,
+            ),
+        ] {
+            assert_eq!(
+                AgentCoreRuntimeArn::from_str(bad).unwrap_err(),
+                expected,
+                "{bad}"
             );
         }
     }

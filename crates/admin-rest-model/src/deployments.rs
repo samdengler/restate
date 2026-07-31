@@ -847,4 +847,57 @@ mod tests {
             }
         }
     }
+
+    /// `DeploymentResponse` is `#[serde(untagged)]` and the `Lambda` variant
+    /// is tried before `AgentCore`. An AgentCore response only deserializes
+    /// back into the right variant because an agentcore ARN fails `LambdaARN`
+    /// parsing — this test pins that behavior so a future edit (e.g. relaxing
+    /// the ARN types to `String`) cannot silently break it.
+    #[test]
+    fn untagged_deployment_response_distinguishes_agentcore_from_lambda() {
+        let agentcore = DeploymentResponse::AgentCore {
+            id: DeploymentId::new(),
+            arn: "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/my_agent-a1B2c3"
+                .parse()
+                .unwrap(),
+            assume_role_arn: None,
+            additional_headers: Default::default(),
+            metadata: Default::default(),
+            created_at: std::time::SystemTime::now().into(),
+            min_protocol_version: 5,
+            max_protocol_version: 5,
+            sdk_version: None,
+            services: vec![],
+            info: vec![],
+        };
+        let json = serde_json::to_string(&agentcore).unwrap();
+        let back: DeploymentResponse = serde_json::from_str(&json).unwrap();
+        assert!(
+            matches!(back, DeploymentResponse::AgentCore { .. }),
+            "agentcore response deserialized into the wrong untagged variant: {json}"
+        );
+
+        let lambda = DeploymentResponse::Lambda {
+            id: DeploymentId::new(),
+            arn: "arn:aws:lambda:us-east-1:123456789012:function:my-function:1"
+                .parse()
+                .unwrap(),
+            assume_role_arn: None,
+            compression: None,
+            additional_headers: Default::default(),
+            metadata: Default::default(),
+            created_at: std::time::SystemTime::now().into(),
+            min_protocol_version: 5,
+            max_protocol_version: 5,
+            sdk_version: None,
+            services: vec![],
+            info: vec![],
+        };
+        let json = serde_json::to_string(&lambda).unwrap();
+        let back: DeploymentResponse = serde_json::from_str(&json).unwrap();
+        assert!(
+            matches!(back, DeploymentResponse::Lambda { .. }),
+            "lambda response deserialized into the wrong untagged variant: {json}"
+        );
+    }
 }

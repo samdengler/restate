@@ -479,13 +479,12 @@ impl SchemaUpdater {
                 assume_role_arn: a.assume_role_arn.map(Into::into),
                 compression,
             },
-            (
-                DeploymentAddress::AgentCore(a),
-                DeploymentConnectionParameters::AgentCore {},
-            ) => DeploymentType::AgentCore {
-                arn: a.arn,
-                assume_role_arn: a.assume_role_arn.map(Into::into),
-            },
+            (DeploymentAddress::AgentCore(a), DeploymentConnectionParameters::AgentCore {}) => {
+                DeploymentType::AgentCore {
+                    arn: a.arn,
+                    assume_role_arn: a.assume_role_arn.map(Into::into),
+                }
+            }
             _ => unreachable!(
                 "deployment address and discovered deployment parameters are not of the same type"
             ),

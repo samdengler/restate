@@ -105,9 +105,7 @@ impl Deployment {
             ) => Self::semantic_eq_lambda(this_arn, other_arn),
             (
                 DeploymentType::AgentCore { arn: this_arn, .. },
-                DeploymentAddress::AgentCore(AgentCoreDeploymentAddress {
-                    arn: other_arn, ..
-                }),
+                DeploymentAddress::AgentCore(AgentCoreDeploymentAddress { arn: other_arn, .. }),
             ) => this_arn == other_arn,
             _ => false,
         }
@@ -471,6 +469,22 @@ mod serde_tests {
             },
             dt
         );
+    }
+
+    #[test]
+    fn agentcore_deployment_type_round_trips() {
+        let original = DeploymentType::AgentCore {
+            arn: "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/my_agent-a1B2c3"
+                .parse()
+                .unwrap(),
+            assume_role_arn: Some(ByteString::from_static(
+                "arn:aws:iam::123456789012:role/invoker",
+            )),
+        };
+        let mut buf = bytes::BytesMut::default();
+        StorageCodec::encode(&original, &mut buf).unwrap();
+        let decoded: DeploymentType = StorageCodec::decode(&mut buf).unwrap();
+        assert_eq!(original, decoded);
     }
 
     #[test]

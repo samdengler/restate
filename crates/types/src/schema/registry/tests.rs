@@ -340,3 +340,84 @@ pub async fn register_http_with_gcp_auth_persists_audience_verbatim() {
         "audience must be preserved verbatim by the registry",
     );
 }
+
+#[test(tokio::test)]
+pub async fn register_deployment_agentcore() {
+    use crate::deployment::AgentCoreDeploymentAddress;
+    use crate::identifiers::AgentCoreRuntimeArn;
+
+    let schema_metadata = mock_arc_schema();
+    let schema_registry = SchemaRegistry::new(
+        schema_metadata.clone(),
+        DiscoveryResponse {
+            deployment_type_parameters: DeploymentConnectionParameters::AgentCore {},
+            ..DiscoveryResponse::mock(vec![greeter_service()])
+        },
+        (),
+    );
+
+    let arn: AgentCoreRuntimeArn =
+        "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/my_agent-a1B2c3"
+            .parse()
+            .unwrap();
+    let register_deployment_request = RegisterDeploymentRequest {
+        deployment_address: DeploymentAddress::AgentCore(AgentCoreDeploymentAddress::new(
+            arn.clone(),
+            None,
+        )),
+        additional_headers: Default::default(),
+        metadata: Default::default(),
+        use_http_11: false,
+        allow_breaking: AllowBreakingChanges::No,
+        overwrite: Overwrite::No,
+        apply_mode: ApplyMode::Apply,
+    };
+
+    // First registration creates the deployment.
+    let (add_deployment_result, deployment, _) = schema_registry
+        .register_deployment(register_deployment_request.clone())
+        .await
+        .unwrap();
+    assert_eq!(add_deployment_result, AddDeploymentResult::Created);
+    assert_eq!(
+        deployment.ty.as_address(),
+        AgentCoreDeploymentAddress::new(arn.clone(), None).into()
+    );
+    assert_eq!(deployment.ty.as_static_str(), "AgentCore");
+    schema_metadata
+        .get()
+        .assert_service_revision(GREETER_SERVICE_NAME, 1);
+
+    // Re-registering the same ARN is a no-op with the same id.
+    let (add_deployment_result, deployment_again, _) = schema_registry
+        .register_deployment(register_deployment_request)
+        .await
+        .unwrap();
+    assert_eq!(add_deployment_result, AddDeploymentResult::Unchanged);
+    assert_eq!(deployment.id, deployment_again.id);
+    schema_metadata
+        .get()
+        .assert_service_revision(GREETER_SERVICE_NAME, 1);
+
+    // Address updates are not supported for AgentCore deployments yet;
+    // updating with Lambda or Http options must be rejected.
+    let err = schema_registry
+        .update_deployment(
+            deployment.id,
+            UpdateDeploymentRequest {
+                update_deployment_address: Some(UpdateDeploymentAddress::Lambda {
+                    arn: None,
+                    assume_role_arn: None,
+                }),
+                additional_headers: None,
+                overwrite: Overwrite::No,
+                apply_mode: ApplyMode::Apply,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("agentcore"),
+        "unexpected error: {err}"
+    );
+}

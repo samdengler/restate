@@ -496,7 +496,10 @@ impl<Metadata: MetadataService, Discovery: DiscoveryClient, Telemetry>
                 }
                 // Updating the address of an AgentCore deployment is not supported yet;
                 // re-register instead.
-                (Some(UpdateDeploymentAddress::Lambda { .. }), DeploymentType::AgentCore { .. }) => {
+                (
+                    Some(UpdateDeploymentAddress::Lambda { .. }),
+                    DeploymentType::AgentCore { .. },
+                ) => {
                     return Err(SchemaRegistryErrorInner::UpdateDeployment {
                         actual_deployment_type: "agentcore",
                         expected_deployment_type: "lambda",
@@ -544,10 +547,12 @@ impl<Metadata: MetadataService, Discovery: DiscoveryClient, Telemetry>
                         assume_role_arn,
                     },
                 ) => (
-                    DeploymentAddress::AgentCore(crate::deployment::AgentCoreDeploymentAddress::new(
-                        arn,
-                        assume_role_arn.map(Into::into),
-                    )),
+                    DeploymentAddress::AgentCore(
+                        crate::deployment::AgentCoreDeploymentAddress::new(
+                            arn,
+                            assume_role_arn.map(Into::into),
+                        ),
+                    ),
                     false,
                 ),
             };
