@@ -419,7 +419,7 @@ impl<Metadata: MetadataService, Discovery: DiscoveryClient, Telemetry>
 
         let existing_http_auth = match &existing_deployment.ty {
             DeploymentType::Http { auth, .. } => auth.clone(),
-            DeploymentType::Lambda { .. } => None,
+            DeploymentType::Lambda { .. } | DeploymentType::AgentCore { .. } => None,
         };
 
         // Merge with update changes requested
@@ -494,6 +494,22 @@ impl<Metadata: MetadataService, Discovery: DiscoveryClient, Telemetry>
                     }
                     .into());
                 }
+                // Updating the address of an AgentCore deployment is not supported yet;
+                // re-register instead.
+                (Some(UpdateDeploymentAddress::Lambda { .. }), DeploymentType::AgentCore { .. }) => {
+                    return Err(SchemaRegistryErrorInner::UpdateDeployment {
+                        actual_deployment_type: "agentcore",
+                        expected_deployment_type: "lambda",
+                    }
+                    .into());
+                }
+                (Some(UpdateDeploymentAddress::Http { .. }), DeploymentType::AgentCore { .. }) => {
+                    return Err(SchemaRegistryErrorInner::UpdateDeployment {
+                        actual_deployment_type: "agentcore",
+                        expected_deployment_type: "http",
+                    }
+                    .into());
+                }
                 (
                     None,
                     DeploymentType::Http {
@@ -516,6 +532,19 @@ impl<Metadata: MetadataService, Discovery: DiscoveryClient, Telemetry>
                     },
                 ) => (
                     DeploymentAddress::Lambda(LambdaDeploymentAddress::new(
+                        arn,
+                        assume_role_arn.map(Into::into),
+                    )),
+                    false,
+                ),
+                (
+                    None,
+                    DeploymentType::AgentCore {
+                        arn,
+                        assume_role_arn,
+                    },
+                ) => (
+                    DeploymentAddress::AgentCore(crate::deployment::AgentCoreDeploymentAddress::new(
                         arn,
                         assume_role_arn.map(Into::into),
                     )),

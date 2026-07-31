@@ -20,9 +20,10 @@ use std::sync::Arc;
 
 use crate::config::Configuration;
 use crate::deployment::{
-    DeploymentAddress, Headers, HttpDeploymentAddress, LambdaDeploymentAddress,
+    AgentCoreDeploymentAddress, DeploymentAddress, Headers, HttpDeploymentAddress,
+    LambdaDeploymentAddress,
 };
-use crate::identifiers::{DeploymentId, LambdaARN, ServiceRevision};
+use crate::identifiers::{AgentCoreRuntimeArn, DeploymentId, LambdaARN, ServiceRevision};
 use crate::schema::info::SchemaInfo;
 use crate::schema::service::ServiceMetadata;
 use crate::time::MillisSinceEpoch;
@@ -102,6 +103,12 @@ impl Deployment {
                 DeploymentType::Lambda { arn: this_arn, .. },
                 DeploymentAddress::Lambda(LambdaDeploymentAddress { arn: other_arn, .. }),
             ) => Self::semantic_eq_lambda(this_arn, other_arn),
+            (
+                DeploymentType::AgentCore { arn: this_arn, .. },
+                DeploymentAddress::AgentCore(AgentCoreDeploymentAddress {
+                    arn: other_arn, ..
+                }),
+            ) => this_arn == other_arn,
             _ => false,
         }
     }
@@ -164,6 +171,10 @@ pub enum DeploymentType {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         compression: Option<EndpointLambdaCompression>,
     },
+    AgentCore {
+        arn: AgentCoreRuntimeArn,
+        assume_role_arn: Option<ByteString>,
+    },
 }
 
 impl DeploymentType {
@@ -176,6 +187,7 @@ impl DeploymentType {
                 match self {
                     Wrapper(DeploymentType::Http { address, .. }) => address.fmt(f),
                     Wrapper(DeploymentType::Lambda { arn, .. }) => arn.fmt(f),
+                    Wrapper(DeploymentType::AgentCore { arn, .. }) => arn.fmt(f),
                 }
             }
         }
@@ -195,6 +207,14 @@ impl DeploymentType {
                 ..
             } => LambdaDeploymentAddress::new(arn.clone(), assume_role_arn.clone().map(Into::into))
                 .into(),
+            DeploymentType::AgentCore {
+                arn,
+                assume_role_arn,
+            } => AgentCoreDeploymentAddress::new(
+                arn.clone(),
+                assume_role_arn.clone().map(Into::into),
+            )
+            .into(),
         }
     }
 
@@ -209,6 +229,7 @@ impl DeploymentType {
         match self {
             DeploymentType::Http { protocol_type, .. } => *protocol_type,
             DeploymentType::Lambda { .. } => ProtocolType::RequestResponse,
+            DeploymentType::AgentCore { .. } => ProtocolType::RequestResponse,
         }
     }
 
@@ -223,6 +244,7 @@ impl DeploymentType {
                 ..
             } => "Http/request-response",
             DeploymentType::Lambda { .. } => "Lambda",
+            DeploymentType::AgentCore { .. } => "AgentCore",
         }
     }
 }
@@ -338,6 +360,10 @@ mod serde_hacks {
             #[serde(default, skip_serializing_if = "Option::is_none")]
             compression: Option<EndpointLambdaCompression>,
         },
+        AgentCore {
+            arn: AgentCoreRuntimeArn,
+            assume_role_arn: Option<ByteString>,
+        },
     }
 
     impl From<DeploymentType> for super::DeploymentType {
@@ -365,6 +391,13 @@ mod serde_hacks {
                     arn,
                     assume_role_arn,
                     compression,
+                },
+                DeploymentType::AgentCore {
+                    arn,
+                    assume_role_arn,
+                } => Self::AgentCore {
+                    arn,
+                    assume_role_arn,
                 },
             }
         }

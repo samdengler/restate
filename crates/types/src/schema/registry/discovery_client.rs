@@ -35,6 +35,7 @@ pub enum DeploymentConnectionParameters {
     Lambda {
         compression: Option<EndpointLambdaCompression>,
     },
+    AgentCore {},
 }
 
 #[derive(Debug, Clone)]

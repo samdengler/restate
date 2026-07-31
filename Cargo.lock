@@ -633,6 +633,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-bedrockagentcore"
+version = "1.51.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7710d5e45cc87c323a71e6d853bd3b3bcb501b49b951c5b9ad542e0fb5fbc9f1"
+dependencies = [
+ "arc-swap",
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-eventstream",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-observability",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand",
+ "http 0.2.12",
+ "http 1.4.2",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sdk-dynamodb"
 version = "1.111.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8584,6 +8610,7 @@ dependencies = [
  "arc-swap",
  "aws-config",
  "aws-credential-types",
+ "aws-sdk-bedrockagentcore",
  "aws-sdk-lambda",
  "aws-sdk-sts",
  "base64 0.22.1",
@@ -8627,6 +8654,7 @@ dependencies = [
  "tokio-util",
  "tower",
  "tracing",
+ "uuid",
  "zstd",
 ]
 

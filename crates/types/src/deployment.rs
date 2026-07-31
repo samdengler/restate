@@ -13,7 +13,7 @@
 // to refer to `restate_types::deployment::HttpAuth` via the deployment-address surface.
 pub use crate::schema::deployment::{GoogleIdTokenAuth, HttpAuth, derive_audience};
 
-use crate::identifiers::{DeploymentId, LambdaARN};
+use crate::identifiers::{AgentCoreRuntimeArn, DeploymentId, LambdaARN};
 use crate::service_protocol::ServiceProtocolVersion;
 use http::{HeaderName, HeaderValue, Uri};
 use std::collections::HashMap;
@@ -65,11 +65,34 @@ impl fmt::Display for LambdaDeploymentAddress {
     }
 }
 
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentCoreDeploymentAddress {
+    pub arn: AgentCoreRuntimeArn,
+    pub assume_role_arn: Option<String>,
+}
+
+impl AgentCoreDeploymentAddress {
+    pub fn new(arn: AgentCoreRuntimeArn, assume_role_arn: Option<String>) -> Self {
+        Self {
+            arn,
+            assume_role_arn,
+        }
+    }
+}
+
+impl fmt::Display for AgentCoreDeploymentAddress {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.arn, f)
+    }
+}
+
 /// This is the representation of a deployment address
 #[derive(Debug, Clone, PartialEq, derive_more::From)]
 pub enum DeploymentAddress {
     Http(HttpDeploymentAddress),
     Lambda(LambdaDeploymentAddress),
+    AgentCore(AgentCoreDeploymentAddress),
 }
 
 impl fmt::Display for DeploymentAddress {
@@ -77,6 +100,7 @@ impl fmt::Display for DeploymentAddress {
         match self {
             DeploymentAddress::Http(d) => fmt::Display::fmt(d, f),
             DeploymentAddress::Lambda(d) => fmt::Display::fmt(d, f),
+            DeploymentAddress::AgentCore(d) => fmt::Display::fmt(d, f),
         }
     }
 }

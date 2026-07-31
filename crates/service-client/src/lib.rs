@@ -26,9 +26,10 @@ use hyper::{HeaderMap, Response, Uri};
 
 use restate_types::config::ServiceClientOptions;
 use restate_types::deployment::HttpAuth;
-use restate_types::identifiers::LambdaARN;
+use restate_types::identifiers::{AgentCoreRuntimeArn, LambdaARN};
 use restate_types::schema::deployment::{Deployment, DeploymentType, EndpointLambdaCompression};
 
+use crate::agentcore::AgentCoreClient;
 pub use crate::gcp::{GcpAuthError, GcpTokenClient, IdTokenCacheMode};
 pub use crate::http::HttpClient;
 pub use crate::http::HttpError;
@@ -36,6 +37,7 @@ pub use crate::lambda::AssumeRoleCacheMode;
 use crate::lambda::LambdaClient;
 use crate::request_identity::SignRequest;
 
+mod agentcore;
 mod gcp;
 mod http;
 mod lambda;
@@ -59,6 +61,7 @@ pub type ResponseBody = http_body_util::Either<http::ResponseBody, Full<Bytes>>;
 pub struct ServiceClient {
     http: HttpClient,
     lambda: LambdaClient,
+    agentcore: AgentCoreClient,
     pub(crate) gcp: GcpTokenClient,
     // this can be changed to re-read periodically if necessary
     request_identity_key: Arc<ArcSwapOption<request_identity::v1::SigningKey>>,
@@ -69,6 +72,7 @@ impl ServiceClient {
     pub(crate) fn new(
         http: HttpClient,
         lambda: LambdaClient,
+        agentcore: AgentCoreClient,
         gcp: GcpTokenClient,
         request_identity_key: Arc<ArcSwapOption<request_identity::v1::SigningKey>>,
         additional_request_headers: HashMap<HeaderName, HeaderValue>,
@@ -76,6 +80,7 @@ impl ServiceClient {
         Self {
             http,
             lambda,
+            agentcore,
             gcp,
             request_identity_key,
             additional_request_headers,
@@ -110,6 +115,7 @@ impl ServiceClient {
         Ok(Self::new(
             HttpClient::from_options(&options.http),
             LambdaClient::from_options(&options.lambda, assume_role_cache_mode),
+            AgentCoreClient::from_options(&options.lambda, assume_role_cache_mode),
             GcpTokenClient::new(gcp_cache_mode),
             request_identity_key,
             options
@@ -223,6 +229,25 @@ impl ServiceClient {
                         .map_err(|e| ServiceClientError::Lambda(arn, e))?
                         .map(http_body_util::Either::Right))
                 }
+                .left_future()
+                .right_future()
+            }
+            Endpoint::AgentCore(arn, assume_role_arn) => {
+                let fut = self.agentcore.invoke(
+                    arn.clone(),
+                    parts.method.into(),
+                    assume_role_arn,
+                    body,
+                    parts.path,
+                    parts.headers,
+                );
+                async move {
+                    Ok(fut
+                        .await
+                        .map_err(|e| ServiceClientError::AgentCore(arn, e))?
+                        .map(http_body_util::Either::Right))
+                }
+                .right_future()
                 .right_future()
             }
         }
@@ -236,6 +261,8 @@ pub enum ServiceClientError {
     Http(Uri, #[source] http::HttpError),
     #[error("error when calling '{0}': {1}")]
     Lambda(LambdaARN, #[source] lambda::LambdaError),
+    #[error("error when calling '{0}': {1}")]
+    AgentCore(AgentCoreRuntimeArn, #[source] agentcore::AgentCoreError),
     #[error("error minting GCP ID token for '{0}': {1}")]
     GcpAuth(Uri, #[source] gcp::GcpAuthError),
     #[error(transparent)]
@@ -249,6 +276,7 @@ impl ServiceClientError {
         match self {
             ServiceClientError::Http(_, http_error) => http_error.is_retryable(),
             ServiceClientError::Lambda(_, lambda_error) => lambda_error.is_retryable(),
+            ServiceClientError::AgentCore(_, agentcore_error) => agentcore_error.is_retryable(),
             // GCP token-mint errors:
             // - Application Default Credentials (`Adc`) load failure is treated as transient (e.g.
             //   metadata-server briefly unreachable).
@@ -367,6 +395,10 @@ impl Parts {
                 auth,
                 ..
             } => Endpoint::Http(address, Some(http_version), auth),
+            DeploymentType::AgentCore {
+                arn,
+                assume_role_arn,
+            } => Endpoint::AgentCore(arn, assume_role_arn),
         };
 
         headers.extend(deployment.additional_headers);
@@ -388,6 +420,7 @@ pub enum Endpoint {
         Option<ByteString>,
         Option<EndpointLambdaCompression>,
     ),
+    AgentCore(AgentCoreRuntimeArn, Option<ByteString>),
 }
 
 impl fmt::Display for Endpoint {
@@ -395,6 +428,7 @@ impl fmt::Display for Endpoint {
         match self {
             Self::Http(uri, _, _) => uri.fmt(f),
             Self::Lambda(arn, _, _) => write!(f, "lambda://{arn}"),
+            Self::AgentCore(arn, _) => write!(f, "agentcore://{arn}"),
         }
     }
 }

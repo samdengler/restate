@@ -481,6 +481,10 @@ where
                 auth,
                 ..
             } => Endpoint::Http(address, Some(http_version), auth),
+            DeploymentType::AgentCore {
+                arn,
+                assume_role_arn,
+            } => Endpoint::AgentCore(arn, assume_role_arn),
         };
 
         headers.extend(deployment_metadata.additional_headers);

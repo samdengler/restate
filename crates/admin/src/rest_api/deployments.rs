@@ -21,8 +21,12 @@ use serde::Deserialize;
 use restate_admin_rest_model::deployments::*;
 use restate_admin_rest_model::version::AdminApiVersion;
 use restate_errors::warn_it;
-use restate_types::deployment::{HttpDeploymentAddress, LambdaDeploymentAddress};
-use restate_types::identifiers::{DeploymentId, InvalidLambdaARN, ServiceRevision};
+use restate_types::deployment::{
+    AgentCoreDeploymentAddress, HttpDeploymentAddress, LambdaDeploymentAddress,
+};
+use restate_types::identifiers::{
+    DeploymentId, InvalidAgentCoreRuntimeArn, InvalidLambdaARN, ServiceRevision,
+};
 use restate_types::schema;
 use restate_types::schema::deployment::{Deployment, DeploymentType};
 use restate_types::schema::registry::{
@@ -135,21 +139,37 @@ where
             additional_headers,
             metadata,
             ..
-        } => schema::registry::RegisterDeploymentRequest {
-            deployment_address: LambdaDeploymentAddress::new(
-                arn.parse().map_err(|e: InvalidLambdaARN| {
-                    MetaApiError::InvalidField("arn", e.to_string())
-                })?,
-                assume_role_arn,
-            )
-            .into(),
-            additional_headers: additional_headers.unwrap_or_default().into(),
-            metadata,
-            use_http_11: false,
-            allow_breaking,
-            overwrite,
-            apply_mode,
-        },
+        } => {
+            // The `arn` field carries both Lambda and Bedrock AgentCore Runtime
+            // ARNs; dispatch on the ARN service segment so existing clients
+            // (e.g. the CLI) can register either without changes.
+            let deployment_address = if arn.split(':').nth(2) == Some("bedrock-agentcore") {
+                AgentCoreDeploymentAddress::new(
+                    arn.parse().map_err(|e: InvalidAgentCoreRuntimeArn| {
+                        MetaApiError::InvalidField("arn", e.to_string())
+                    })?,
+                    assume_role_arn,
+                )
+                .into()
+            } else {
+                LambdaDeploymentAddress::new(
+                    arn.parse().map_err(|e: InvalidLambdaARN| {
+                        MetaApiError::InvalidField("arn", e.to_string())
+                    })?,
+                    assume_role_arn,
+                )
+                .into()
+            };
+            schema::registry::RegisterDeploymentRequest {
+                deployment_address,
+                additional_headers: additional_headers.unwrap_or_default().into(),
+                metadata,
+                use_http_11: false,
+                allow_breaking,
+                overwrite,
+                apply_mode,
+            }
+        }
     };
 
     // -- Perform the registration with the schema registry
@@ -532,6 +552,25 @@ fn to_deployment_response(
                 .collect(),
             info,
         },
+        DeploymentType::AgentCore {
+            arn,
+            assume_role_arn,
+        } => DeploymentResponse::AgentCore {
+            id,
+            arn,
+            assume_role_arn: assume_role_arn.map(Into::into),
+            additional_headers: additional_headers.into(),
+            metadata,
+            created_at: SystemTime::from(created_at).into(),
+            min_protocol_version: *supported_protocol_versions.start(),
+            max_protocol_version: *supported_protocol_versions.end(),
+            sdk_version,
+            services: services
+                .into_iter()
+                .map(|(name, revision)| ServiceNameRevPair { name, revision })
+                .collect(),
+            info,
+        },
     }
 }
 
@@ -579,6 +618,22 @@ fn to_detailed_deployment_response(
             arn,
             assume_role_arn: assume_role_arn.map(Into::into),
             compression,
+            additional_headers: additional_headers.into(),
+            metadata,
+            created_at: SystemTime::from(created_at).into(),
+            min_protocol_version: *supported_protocol_versions.start(),
+            max_protocol_version: *supported_protocol_versions.end(),
+            sdk_version,
+            services,
+            info,
+        },
+        DeploymentType::AgentCore {
+            arn,
+            assume_role_arn,
+        } => DetailedDeploymentResponse::AgentCore {
+            id,
+            arn,
+            assume_role_arn: assume_role_arn.map(Into::into),
             additional_headers: additional_headers.into(),
             metadata,
             created_at: SystemTime::from(created_at).into(),

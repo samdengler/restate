@@ -36,6 +36,7 @@ pub fn render_deployment_url(deployment: &Deployment) -> String {
     match deployment {
         Deployment::Http { uri, .. } => uri.to_string(),
         Deployment::Lambda { arn, .. } => arn.to_string(),
+        Deployment::AgentCore { arn, .. } => arn.to_string(),
     }
 }
 
@@ -43,6 +44,7 @@ pub fn render_deployment_type(deployment: &Deployment) -> String {
     match deployment {
         Deployment::Http { .. } => "HTTP".to_string(),
         Deployment::Lambda { .. } => "Lambda".to_string(),
+        Deployment::AgentCore { .. } => "AgentCore".to_string(),
     }
 }
 
@@ -52,6 +54,7 @@ pub fn render_transport_protocol(deployment: &Deployment) -> String {
             format!("{http_version:?}")
         }
         Deployment::Lambda { .. } => "AWS Lambda".to_string(),
+        Deployment::AgentCore { .. } => "Bedrock AgentCore".to_string(),
     }
 }
 
@@ -160,6 +163,38 @@ pub fn add_deployment_to_kv_table(deployment: &Deployment, table: &mut Table) {
             ..
         } => {
             table.add_kv_row("Transport:", "AWS Lambda");
+            table.add_kv_row(
+                "Protocol Style:",
+                format!("{}", ProtocolType::RequestResponse),
+            );
+            table.add_kv_row_if(
+                || assume_role_arn.is_some(),
+                "Deployment Assume Role ARN:",
+                || assume_role_arn.as_ref().unwrap(),
+            );
+
+            table.add_kv_row("Endpoint:", arn);
+            (
+                additional_headers.clone(),
+                metadata.clone(),
+                created_at,
+                min_protocol_version,
+                max_protocol_version,
+                sdk_version,
+            )
+        }
+        Deployment::AgentCore {
+            arn,
+            assume_role_arn,
+            additional_headers,
+            created_at,
+            min_protocol_version,
+            max_protocol_version,
+            metadata,
+            sdk_version,
+            ..
+        } => {
+            table.add_kv_row("Transport:", "Bedrock AgentCore");
             table.add_kv_row(
                 "Protocol Style:",
                 format!("{}", ProtocolType::RequestResponse),

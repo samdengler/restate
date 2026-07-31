@@ -216,6 +216,10 @@ impl DiscoveryClient for ServiceDiscovery {
             DeploymentAddress::Lambda(lambda) => {
                 Endpoint::Lambda(lambda.arn, lambda.assume_role_arn.map(Into::into), None)
             }
+            DeploymentAddress::AgentCore(agentcore) => Endpoint::AgentCore(
+                agentcore.arn,
+                agentcore.assume_role_arn.map(Into::into),
+            ),
         };
 
         let cloned_endpoint = endpoint.clone();
@@ -423,6 +427,7 @@ impl ServiceDiscovery {
                         }
                     }),
                 },
+                Endpoint::AgentCore { .. } => DeploymentConnectionParameters::AgentCore {},
             },
             services: endpoint_response.services,
             // we need to store the raw representation since the runtime might not know the latest

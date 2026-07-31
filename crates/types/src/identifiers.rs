@@ -930,7 +930,7 @@ impl schemars::JsonSchema for LambdaARN {
 
 #[cfg(feature = "utoipa-schema")]
 mod utoipa_schema {
-    use crate::identifiers::{InvocationId, LambdaARN};
+    use crate::identifiers::{AgentCoreRuntimeArn, InvocationId, LambdaARN};
     use std::borrow::Cow;
     use utoipa::openapi::{Object, RefOr, Schema, Type};
     use utoipa::{PartialSchema, ToSchema};
@@ -942,6 +942,18 @@ mod utoipa_schema {
     }
 
     impl PartialSchema for LambdaARN {
+        fn schema() -> RefOr<Schema> {
+            Schema::Object(Object::builder().schema_type(Type::String).build()).into()
+        }
+    }
+
+    impl ToSchema for AgentCoreRuntimeArn {
+        fn name() -> Cow<'static, str> {
+            "AgentCoreRuntimeArn".into()
+        }
+    }
+
+    impl PartialSchema for AgentCoreRuntimeArn {
         fn schema() -> RefOr<Schema> {
             Schema::Object(Object::builder().schema_type(Type::String).build()).into()
         }
@@ -1031,6 +1043,91 @@ impl FromStr for LambdaARN {
         };
 
         Ok(lambda)
+    }
+}
+
+/// ARN of a Bedrock AgentCore Runtime, e.g.
+/// `arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/my_agent-a1B2c3`
+#[derive(Debug, Clone, PartialEq, serde_with::SerializeDisplay, serde_with::DeserializeFromStr)]
+pub struct AgentCoreRuntimeArn {
+    arn: Arc<str>,
+    region: std::ops::Range<u32>,
+}
+
+impl AgentCoreRuntimeArn {
+    pub fn region(&self) -> &str {
+        &self.arn[(self.region.start as usize)..(self.region.end as usize)]
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for AgentCoreRuntimeArn {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "AgentCoreRuntimeArn".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+        })
+    }
+}
+
+impl Display for AgentCoreRuntimeArn {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.arn.fmt(f)
+    }
+}
+
+#[derive(Debug, thiserror::Error, PartialEq)]
+pub enum InvalidAgentCoreRuntimeArn {
+    #[error("An AgentCore runtime ARN must have 6 components delimited by `:`")]
+    InvalidFormat,
+    #[error("First component of the ARN must be `arn`")]
+    InvalidPrefix,
+    #[error("ARN must be for the bedrock-agentcore service")]
+    InvalidService,
+    #[error("ARN must refer to a `runtime/` resource")]
+    InvalidResourceType,
+    #[error("Partition, region, account ID and runtime id must all be non-empty")]
+    InvalidComponent,
+}
+
+impl FromStr for AgentCoreRuntimeArn {
+    type Err = InvalidAgentCoreRuntimeArn;
+
+    fn from_str(arn: &str) -> Result<Self, Self::Err> {
+        let mut split = arn.splitn(6, ':');
+        let invalid_format = || InvalidAgentCoreRuntimeArn::InvalidFormat;
+        let prefix = split.next().ok_or_else(invalid_format)?;
+        let partition = split.next().ok_or_else(invalid_format)?;
+        let service = split.next().ok_or_else(invalid_format)?;
+        let region = split.next().ok_or_else(invalid_format)?;
+        let account_id = split.next().ok_or_else(invalid_format)?;
+        let resource = split.next().ok_or_else(invalid_format)?;
+
+        if prefix != "arn" {
+            return Err(InvalidAgentCoreRuntimeArn::InvalidPrefix);
+        }
+        if service != "bedrock-agentcore" {
+            return Err(InvalidAgentCoreRuntimeArn::InvalidService);
+        }
+        let runtime_id = resource
+            .strip_prefix("runtime/")
+            .ok_or(InvalidAgentCoreRuntimeArn::InvalidResourceType)?;
+        if partition.is_empty() || region.is_empty() || account_id.is_empty() || runtime_id.is_empty()
+        {
+            return Err(InvalidAgentCoreRuntimeArn::InvalidComponent);
+        }
+
+        // arn:<partition>:bedrock-agentcore:<region>:
+        //                                   ^       ^
+        let region_start = 3 + 1 + (partition.len() as u32) + 1 + 17 + 1;
+        let region_end = region_start + (region.len() as u32);
+        Ok(Self {
+            arn: Arc::<str>::from(arn),
+            region: region_start..region_end,
+        })
     }
 }
 

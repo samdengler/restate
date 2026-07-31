@@ -23,7 +23,7 @@ use restate_admin_rest_model::subscriptions::*;
 use restate_admin_rest_model::version::VersionInformation;
 use restate_futures_util::streams::StreamExt as RestateStreamExt;
 use restate_serde_util::SerdeableHeaderHashMap;
-use restate_types::identifiers::{DeploymentId, LambdaARN};
+use restate_types::identifiers::{AgentCoreRuntimeArn, DeploymentId, LambdaARN};
 use restate_types::schema::deployment::ProtocolType;
 use restate_types::schema::service::ServiceMetadata;
 use std::collections::HashMap;
@@ -501,6 +501,16 @@ pub enum Deployment {
         metadata: HashMap<String, String>,
         sdk_version: Option<String>,
     },
+    AgentCore {
+        arn: AgentCoreRuntimeArn,
+        assume_role_arn: Option<String>,
+        additional_headers: SerdeableHeaderHashMap,
+        created_at: humantime::Timestamp,
+        min_protocol_version: i32,
+        max_protocol_version: i32,
+        metadata: HashMap<String, String>,
+        sdk_version: Option<String>,
+    },
 }
 
 impl Deployment {
@@ -508,6 +518,7 @@ impl Deployment {
         match self {
             Self::Http { created_at, .. } => *created_at,
             Self::Lambda { created_at, .. } => *created_at,
+            Self::AgentCore { created_at, .. } => *created_at,
         }
     }
 
@@ -571,6 +582,32 @@ impl Deployment {
                 },
                 services,
             ),
+            DeploymentResponse::AgentCore {
+                id,
+                arn,
+                assume_role_arn,
+                additional_headers,
+                created_at,
+                min_protocol_version,
+                max_protocol_version,
+                services,
+                metadata,
+                sdk_version,
+                ..
+            } => (
+                id,
+                Deployment::AgentCore {
+                    arn,
+                    assume_role_arn,
+                    additional_headers,
+                    created_at,
+                    min_protocol_version,
+                    max_protocol_version,
+                    metadata,
+                    sdk_version,
+                },
+                services,
+            ),
         }
     }
 
@@ -623,6 +660,32 @@ impl Deployment {
             } => (
                 id,
                 Deployment::Lambda {
+                    arn,
+                    assume_role_arn,
+                    additional_headers,
+                    created_at,
+                    min_protocol_version,
+                    max_protocol_version,
+                    metadata,
+                    sdk_version,
+                },
+                services,
+            ),
+            DetailedDeploymentResponse::AgentCore {
+                id,
+                arn,
+                assume_role_arn,
+                additional_headers,
+                created_at,
+                min_protocol_version,
+                max_protocol_version,
+                services,
+                metadata,
+                sdk_version,
+                ..
+            } => (
+                id,
+                Deployment::AgentCore {
                     arn,
                     assume_role_arn,
                     additional_headers,

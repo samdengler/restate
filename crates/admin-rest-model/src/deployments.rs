@@ -11,7 +11,7 @@
 use http::{Uri, Version};
 use restate_serde_util::SerdeableHeaderHashMap;
 use restate_types::identifiers::ServiceRevision;
-use restate_types::identifiers::{DeploymentId, LambdaARN};
+use restate_types::identifiers::{AgentCoreRuntimeArn, DeploymentId, LambdaARN};
 use restate_types::schema::deployment::{EndpointLambdaCompression, ProtocolType};
 use restate_types::schema::info::SchemaInfo;
 use restate_types::schema::service::ServiceMetadata;
@@ -430,6 +430,66 @@ pub enum DeploymentResponse {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         info: Vec<SchemaInfo>,
     },
+    /// Deployment response for Bedrock AgentCore Runtime deployments
+    #[cfg_attr(feature = "schema", schema(title = "AgentCoreDeploymentResponse"))]
+    AgentCore {
+        /// # Deployment ID
+        id: DeploymentId,
+
+        /// # AgentCore Runtime ARN
+        ///
+        /// Bedrock AgentCore Runtime ARN used to invoke this service deployment.
+        arn: AgentCoreRuntimeArn,
+
+        /// # Assume role ARN
+        ///
+        /// Assume role ARN used to invoke this deployment.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        assume_role_arn: Option<String>,
+
+        /// # Additional headers
+        ///
+        /// Additional headers used to invoke this service deployment.
+        #[serde(default, skip_serializing_if = "SerdeableHeaderHashMap::is_empty")]
+        additional_headers: SerdeableHeaderHashMap,
+
+        /// # Metadata
+        ///
+        /// Deployment metadata.
+        #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+        metadata: HashMap<String, String>,
+
+        #[serde(with = "serde_with::As::<serde_with::DisplayFromStr>")]
+        #[cfg_attr(feature = "schema", schema(value_type = String))]
+        created_at: humantime::Timestamp,
+
+        /// # Minimum Service Protocol version
+        ///
+        /// During registration, the SDKs declare a range from minimum (included) to maximum (included) Service Protocol supported version.
+        min_protocol_version: i32,
+
+        /// # Maximum Service Protocol version
+        ///
+        /// During registration, the SDKs declare a range from minimum (included) to maximum (included) Service Protocol supported version.
+        max_protocol_version: i32,
+
+        /// # SDK version
+        ///
+        /// SDK library and version declared during registration.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sdk_version: Option<String>,
+
+        /// # Services
+        ///
+        /// List of services exposed by this deployment.
+        services: Vec<ServiceNameRevPair>,
+
+        /// # Info
+        ///
+        /// List of configuration/deprecation information related to this deployment.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        info: Vec<SchemaInfo>,
+    },
 }
 
 impl DeploymentResponse {
@@ -437,6 +497,7 @@ impl DeploymentResponse {
         match self {
             Self::Http { id, .. } => *id,
             Self::Lambda { id, .. } => *id,
+            Self::AgentCore { id, .. } => *id,
         }
     }
 }
@@ -587,6 +648,69 @@ pub enum DetailedDeploymentResponse {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         info: Vec<SchemaInfo>,
     },
+    /// Detailed deployment response for Bedrock AgentCore Runtime deployments
+    #[cfg_attr(
+        feature = "schema",
+        schema(title = "AgentCoreDetailedDeploymentResponse")
+    )]
+    AgentCore {
+        /// # Deployment ID
+        id: DeploymentId,
+
+        /// # AgentCore Runtime ARN
+        ///
+        /// Bedrock AgentCore Runtime ARN used to invoke this service deployment.
+        arn: AgentCoreRuntimeArn,
+
+        /// # Assume role ARN
+        ///
+        /// Assume role ARN used to invoke this deployment.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        assume_role_arn: Option<String>,
+
+        /// # Additional headers
+        ///
+        /// Additional headers used to invoke this service deployment.
+        #[serde(default, skip_serializing_if = "SerdeableHeaderHashMap::is_empty")]
+        additional_headers: SerdeableHeaderHashMap,
+
+        /// # Metadata
+        ///
+        /// Deployment metadata.
+        #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+        metadata: HashMap<String, String>,
+
+        #[serde(with = "serde_with::As::<serde_with::DisplayFromStr>")]
+        #[cfg_attr(feature = "schema", schema(value_type = String))]
+        created_at: humantime::Timestamp,
+
+        /// # Minimum Service Protocol version
+        ///
+        /// During registration, the SDKs declare a range from minimum (included) to maximum (included) Service Protocol supported version.
+        min_protocol_version: i32,
+
+        /// # Maximum Service Protocol version
+        ///
+        /// During registration, the SDKs declare a range from minimum (included) to maximum (included) Service Protocol supported version.
+        max_protocol_version: i32,
+
+        /// # SDK version
+        ///
+        /// SDK library and version declared during registration.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sdk_version: Option<String>,
+
+        /// # Services
+        ///
+        /// List of services exposed by this deployment.
+        services: Vec<ServiceMetadata>,
+
+        /// # Info
+        ///
+        /// List of configuration/deprecation information related to this deployment.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        info: Vec<SchemaInfo>,
+    },
 }
 
 impl DetailedDeploymentResponse {
@@ -594,6 +718,7 @@ impl DetailedDeploymentResponse {
         match self {
             Self::Http { id, .. } => *id,
             Self::Lambda { id, .. } => *id,
+            Self::AgentCore { id, .. } => *id,
         }
     }
 }

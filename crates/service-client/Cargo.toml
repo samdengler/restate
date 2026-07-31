@@ -22,6 +22,7 @@ ahash = { workspace = true }
 arc-swap = { workspace = true }
 aws-config = { workspace = true }
 aws-credential-types = { workspace = true }
+aws-sdk-bedrockagentcore = {version = "1.21.0", default-features = false, features = ["behavior-version-latest", "rt-tokio", "default-https-client"]}
 aws-sdk-lambda = {version = "1.112.0", default-features = false, features = ["behavior-version-latest", "rt-tokio", "default-https-client"]}
 aws-sdk-sts = {version = "1.95.0", default-features = false, features = ["behavior-version-latest", "rt-tokio", "default-https-client"]}
 base64 = { workspace = true }
@@ -56,6 +57,7 @@ tokio-util = { workspace = true }
 tokio-rustls = "0.26"
 tower = { workspace = true }
 tracing = { workspace = true }
+uuid = { workspace = true }
 zstd = { workspace = true }
 
 [dev-dependencies]

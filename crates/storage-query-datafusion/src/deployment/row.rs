@@ -27,6 +27,9 @@ pub(crate) fn append_deployment_row(
         DeploymentType::Lambda { .. } => {
             row.ty("lambda");
         }
+        DeploymentType::AgentCore { .. } => {
+            row.ty("agentcore");
+        }
     }
 
     row.fmt_endpoint(deployment.address_display());

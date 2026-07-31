@@ -135,6 +135,7 @@ async fn list(env: &CliEnv, list_opts: &List) -> Result<()> {
             .with_created_at(match &deployment {
                 Deployment::Http { created_at, .. } => created_at.display(),
                 Deployment::Lambda { created_at, .. } => created_at.display(),
+                Deployment::AgentCore { created_at, .. } => created_at.display(),
             })
             .with_services(render_services(&deployment_id, &services, &latest_services));
 

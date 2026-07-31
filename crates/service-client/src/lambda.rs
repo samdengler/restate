@@ -47,6 +47,7 @@ use std::sync::Arc;
 /// on the invocation path (worker), but not on the discovery path (meta), as the unbounded cache would be a DoS
 /// vector.
 /// See https://github.com/restatedev/restate/issues/878
+#[derive(Clone, Copy)]
 pub enum AssumeRoleCacheMode {
     None,
     Unbounded,
@@ -455,7 +456,7 @@ where
     ))
 }
 
-mod assume_role {
+pub(crate) mod assume_role {
     use aws_credential_types::provider::error::CredentialsError;
     use aws_credential_types::provider::future::ProvideCredentials;
     use aws_sdk_lambda::error::SdkError;
