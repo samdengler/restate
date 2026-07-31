@@ -27,7 +27,7 @@ use restate_admin_rest_model::version::AdminApiVersion;
 use restate_cli_util::ui::console::{Styled, StyledTable, confirm_or_exit};
 use restate_cli_util::ui::stylesheet::Style;
 use restate_cli_util::{c_eprintln, c_error, c_indent_table, c_indentln, c_success, c_warn};
-use restate_types::identifiers::LambdaARN;
+use restate_types::identifiers::{AgentCoreRuntimeArn, LambdaARN};
 use restate_types::schema::service::ServiceMetadata;
 
 use crate::cli_env::CliEnv;
@@ -126,6 +126,7 @@ struct Metadata {
 enum DeploymentEndpoint {
     Uri(Uri),
     Lambda(LambdaARN),
+    AgentCore(AgentCoreRuntimeArn),
 }
 
 impl DeploymentEndpoint {
@@ -133,6 +134,7 @@ impl DeploymentEndpoint {
         match self {
             DeploymentEndpoint::Uri(uri) => uri.to_string(),
             DeploymentEndpoint::Lambda(arn) => arn.to_string(),
+            DeploymentEndpoint::AgentCore(arn) => arn.to_string(),
         }
     }
 }
@@ -142,6 +144,7 @@ impl Display for DeploymentEndpoint {
         match self {
             DeploymentEndpoint::Uri(uri) => write!(f, "URL {uri}"),
             DeploymentEndpoint::Lambda(arn) => write!(f, "AWS Lambda ARN {arn}"),
+            DeploymentEndpoint::AgentCore(arn) => write!(f, "Bedrock AgentCore Runtime ARN {arn}"),
         }
     }
 }
@@ -183,7 +186,12 @@ fn parse_deployment(
     raw: &str,
 ) -> Result<DeploymentEndpoint, Box<dyn std::error::Error + Send + Sync + 'static>> {
     let deployment = if raw.starts_with("arn:") {
-        DeploymentEndpoint::Lambda(LambdaARN::from_str(raw)?)
+        // dispatch on the ARN service segment
+        if raw.split(':').nth(2) == Some("bedrock-agentcore") {
+            DeploymentEndpoint::AgentCore(AgentCoreRuntimeArn::from_str(raw)?)
+        } else {
+            DeploymentEndpoint::Lambda(LambdaARN::from_str(raw)?)
+        }
     } else {
         let mut uri = Uri::from_str(raw).map_err(|e| format!("invalid URL({e})"))?;
         let mut parts = uri.into_parts();
@@ -230,10 +238,15 @@ pub async fn run_register(State(env): State<CliEnv>, discover_opts: &Register) -
     let id_token_auth = discover_opts.gcp_id_token
         || discover_opts.gcp_impersonate_service_account.is_some()
         || discover_opts.gcp_audience.is_some();
-    if id_token_auth && matches!(discover_opts.deployment, DeploymentEndpoint::Lambda(_)) {
+    if id_token_auth
+        && matches!(
+            discover_opts.deployment,
+            DeploymentEndpoint::Lambda(_) | DeploymentEndpoint::AgentCore(_)
+        )
+    {
         bail!(
             "--gcp-id-token, --gcp-impersonate-service-account, and --gcp-audience are \
-             HTTP-only flags. Lambda deployments use --assume-role-arn instead."
+             HTTP-only flags. Lambda and AgentCore deployments use --assume-role-arn instead."
         );
     }
 
@@ -356,7 +369,18 @@ pub async fn run_register(State(env): State<CliEnv>, discover_opts: &Register) -
             dry_run,
             auth: id_token_auth.clone(),
         },
+        // AgentCore runtime ARNs ride the same wire field as Lambda ARNs; the
+        // server dispatches on the ARN service segment.
         DeploymentEndpoint::Lambda(arn) => RegisterDeploymentRequest::Lambda {
+            arn: arn.to_string(),
+            assume_role_arn: discover_opts.assume_role_arn.clone(),
+            additional_headers: headers.clone().map(Into::into),
+            metadata: metadata.clone(),
+            breaking,
+            force: Some(force),
+            dry_run,
+        },
+        DeploymentEndpoint::AgentCore(arn) => RegisterDeploymentRequest::Lambda {
             arn: arn.to_string(),
             assume_role_arn: discover_opts.assume_role_arn.clone(),
             additional_headers: headers.clone().map(Into::into),
