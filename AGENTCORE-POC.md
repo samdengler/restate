@@ -55,22 +55,53 @@ UI affordances, docs, config surface for a dedicated AWS profile.
 
 ## Demo
 
-Prereqs: an ACR runtime running a Restate SDK service behind the POC 1
-adapter (see the companion repo), and ambient AWS credentials with
-`bedrock-agentcore:InvokeAgentRuntime` on it.
+### Prereqs
+
+1. **The POC 1 agent runtime.** From the
+   [companion repo](https://github.com/samdengler/restate-killswitch-poc)
+   (at commit `cf25c8e` or later — the adapter must be the dual-mode version
+   that accepts native Lambda-event payloads), run:
+
+   ```sh
+   infra/build-push.sh        # arm64 agent image -> ECR
+   infra/create-runtime.sh    # ACR runtime; prints the runtime ARN
+   ```
+
+   Nothing else from POC 1 is needed (no proxy, no Gateway, no Restate Cloud).
+
+2. **Ambient AWS credentials** (env/profile/SSO) with
+   `bedrock-agentcore:InvokeAgentRuntime` on that runtime — the *server*
+   makes the call now. Region is taken from the ARN.
+
+3. **Rust build tools**: `rustup` (the repo pins its toolchain via
+   `rust-toolchain.toml`), plus `protoc` and `cmake` on `PATH`
+   (`brew install protobuf cmake` on macOS).
+
+### Run
 
 ```sh
 cargo build -p restate-server -p restate-cli
 
 target/debug/restate-server &           # ingress :8080, admin/UI :9070
 
-# stock or patched CLI — both work
-restate deployments register arn:aws:bedrock-agentcore:us-east-1:<acct>:runtime/<id>
+# NOTE: use the CLI built above. The wire API accepts agentcore ARNs from any
+# client (curl, UI), but released CLIs validate ARNs client-side and reject
+# the bedrock-agentcore service (fixed in this branch).
+target/debug/restate deployments register --yes \
+  arn:aws:bedrock-agentcore:us-east-1:<acct>:runtime/<id>
+
+target/debug/restate deployments list   # TYPE column shows "AgentCore"
 
 # invoke through the ingress; watch journal entries per step in the UI
 curl -X POST localhost:8080/AgentService/run/send \
   -H 'content-type: application/json' -d '{"prompt": "native invoke"}'
 
-# the kill switch: cancel mid-run; compensation runs, done in ~1s
-restate invocations cancel inv_...
+# the kill switch: cancel mid-run (the 10s sleep after step 5 is the easy
+# window); compensation runs durably, done in ~1-2s
+target/debug/restate invocations cancel inv_...
+target/debug/restate invocations describe inv_...   # [409] cancelled
 ```
+
+When finished: stop the server (its data lives in `restate-data/` under the
+cwd it ran from) and use POC 1's `infra/teardown.sh` to remove the AWS
+resources.
